@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>商品管理</title>
+  <!-- QRコード読み取り（本体の出品登録画面と同じライブラリ） -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 12px 8px 16px;
+      background: #f3f4f6;
+      color: #1f2937;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+    }
+
+    .container { max-width: 760px; margin: 0 auto; }
+
+    .view-switch { display: flex; gap: 0; margin-bottom: 10px; }
+    .view-btn { flex: 1; border-radius: 0; background: #e5e7eb; }
+    .view-btn:first-child { border-radius: 8px 0 0 8px; }
+    .view-btn:last-child { border-radius: 0 8px 8px 0; }
+    .view-btn.active { background: #1f2937; color: #fff; }
+
+    table.stats { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table.stats th, table.stats td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; text-align: right; }
+    table.stats th:first-child, table.stats td:first-child { text-align: left; }
+    table.stats th { font-size: 12px; color: #6b7280; font-weight: 600; }
+    table.stats td { font-variant-numeric: tabular-nums; }
+    table.stats td.zero { color: #d1d5db; }
+    table.stats tr.total td { font-weight: 700; border-top: 2px solid #e5e7eb; }
+    .stats-note { margin-top: 8px; }
+
+    /* QR読み取り */
+    .btn-scan { width: 100%; margin-bottom: 8px; padding: 12px; font-size: 15px; }
+    /* 画面には出さないが動く要素（display:none だと端末によってファイル選択・読み取りが動かないため） */
+    .offscreen { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+    .btn-photo {
+      display: block; text-align: center; cursor: pointer;
+      padding: 12px; border-radius: 8px; font-weight: 600;
+      background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;
+    }
+    .camera-area {
+      position: fixed; inset: 0; z-index: 20;
+      background: rgba(0, 0, 0, .65);
+      display: flex; align-items: center; justify-content: center;
+      padding: 12px;
+    }
+    .camera-area[hidden] { display: none; }
+    .camera-modal {
+      width: 100%; max-width: 420px; max-height: 94vh; overflow-y: auto;
+      background: #fff; border-radius: 14px; padding: 14px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .camera-title { font-weight: 700; text-align: center; }
+    #reader { width: 100%; max-width: 300px; margin: 0 auto; border-radius: 8px; overflow: hidden; }
+    .scan-status {
+      padding: 8px 10px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      background: #f3f4f6; color: #374151; white-space: pre-wrap; text-align: center;
+    }
+    .scan-status.success { background: #dcfce7; color: #166534; }
+    .scan-status.error { background: #fee2e2; color: #b91c1c; }
+    .scan-list { list-style: none; margin: 0; padding: 0; font-size: 13px; max-height: 26vh; overflow-y: auto; }
+    .scan-list li { display: flex; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+    .scan-list .item-id { flex: none; }
+    .scan-list .scan-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    h1 { margin: 0; font-size: 1.3rem; }
+    .muted { color: #6b7280; font-size: 12px; }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #e5e7eb;
+      color: #1f2937;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-return { background: #d97706; color: #fff; }
+    .btn-progress { background: #0d9488; color: #fff; }
+    .btn-danger { background: #fee2e2; color: #b91c1c; }
+
+    input, select {
+      padding: 9px 10px;
+      font-size: 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+      min-width: 0;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .tab {
+      background: #fff;
+      border: 1px solid #d1d5db;
+      padding: 8px 12px;
+      font-weight: 600;
+    }
+    .tab.active { background: #1f2937; color: #fff; border-color: #1f2937; }
+    .tab .count { font-weight: 400; margin-left: 4px; }
+
+    .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .toolbar input[type=search] { flex: 1; }
+
+    .item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 10px 4px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+    }
+    .item:last-child { border-bottom: none; }
+    .item.selected { background: #eff6ff; }
+    .item input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+    .item-body { flex: 1; min-width: 0; }
+    .item-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .item-id { font-weight: 700; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .item-name { margin: 2px 0; word-break: break-all; }
+    .item-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: #4b5563; }
+
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #374151;
+    }
+    .badge.未出品 { background: #e0e7ff; color: #3730a3; }
+    .badge.出品済 { background: #dcfce7; color: #166534; }
+    .badge.入札あり { background: #fce7f3; color: #9d174d; }
+    .badge.入金済み { background: #ccfbf1; color: #115e59; }
+    .badge.梱包済み { background: #e0f2fe; color: #075985; }
+    .badge.出荷済み { background: #ede9fe; color: #5b21b6; }
+    .badge.戻り { background: #fef3c7; color: #92400e; }
+    .badge.販売済 { background: #f3f4f6; color: #6b7280; }
+    .badge.pending { background: #fff; border: 1px dashed #9ca3af; color: #6b7280; }
+
+    .empty { text-align: center; color: #6b7280; padding: 24px 0; }
+
+    /* 下に固定する入力欄（商品を選んだときに出す） */
+    .action-bar {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: #fff;
+      box-shadow: 0 -3px 10px rgba(0,0,0,.12);
+      padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
+      display: none;
+    }
+    .action-bar.show { display: block; }
+    .action-inner { max-width: 760px; margin: 0 auto; }
+    .action-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .action-head button { padding: 4px 10px; font-size: 12px; }
+    /* 見出し・入力・ボタンを1行に並べる（スマホでも一覧が隠れすぎないように） */
+    .action-row {
+      display: grid;
+      grid-template-columns: 3.6em minmax(0, 1fr) 6.5em;
+      gap: 6px;
+      align-items: center;
+      margin-top: 6px;
+    }
+    .action-row label { font-size: 13px; font-weight: 600; }
+    .action-row select, .action-row input { width: 100%; padding: 7px 8px; }
+    .action-row button { padding: 8px 6px; white-space: nowrap; }
+    .progress-info { font-size: 13px; color: #4b5563; }
+    .no-action { margin-top: 8px; }
+    [hidden] { display: none !important; }
+
+    /* マイナス方向の操作：閉じた中に小さく目立たないボタンで置く */
+    .minus { margin-top: 8px; border-top: 1px dashed #e5e7eb; padding-top: 6px; }
+    .minus summary { font-size: 12px; font-weight: 600; color: #9ca3af; }
+    .minus-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .btn-minus {
+      background: #fff;
+      border: 1px dashed #d1d5db;
+      color: #6b7280;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .message {
+      position: fixed;
+      top: 10px; left: 50%;
+      transform: translateX(-50%);
+      max-width: 90%;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      white-space: pre-wrap;
+      z-index: 10;
+      display: none;
+    }
+    .message.success { display: block; background: #dcfce7; color: #166534; }
+    .message.error { display: block; background: #fee2e2; color: #b91c1c; }
+
+    details summary { cursor: pointer; font-weight: 700; }
+    .staff-list { list-style: none; padding: 0; margin: 8px 0; }
+    .staff-list li {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid #f1f5f9;
+    }
+    .staff-list button { padding: 4px 10px; font-size: 12px; }
+    .rejected { font-size: 13px; margin: 6px 0 0; padding-left: 18px; }
+    .rejected li { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1 id="pageTitle">商品管理</h1>
+        <div class="muted" id="syncInfo">読み込み中…</div>
+      </div>
+      <button id="syncBtn" class="btn-primary" onclick="syncNow()">今すぐ同期</button>
+    </header>
+
+    <div class="card" id="rejectedCard" style="display:none">
+      <details>
+        <summary>本体に反映できなかった入力（<span id="rejectedCount"></span>件）</summary>
+        <ul class="rejected" id="rejectedList"></ul>
+      </details>
+    </div>
+
+    <!-- 画面の切り替え：一覧 / 集計 -->
+    <div class="view-switch">
+      <button class="view-btn active" data-view="list" onclick="setView('list')">一覧</button>
+      <button class="view-btn" data-view="stats" onclick="setView('stats')">集計</button>
+    </div>
+
+    <div id="listView">
+      <div class="tabs" id="tabs"></div>
+
+      <button class="btn-primary btn-scan" onclick="startScanner()">QRを読み取って商品を選ぶ</button>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="商品ID・商品名で絞り込み" oninput="render()">
+        <button onclick="toggleAll()" id="toggleAllBtn">全選択</button>
+      </div>
+
+      <div class="card" id="list"><div class="empty">読み込み中…</div></div>
+    </div>
+
+    <!-- 集計：登録（仕分け日）・出品（出品日）・出荷済み（出荷済みにした日）の件数 -->
+    <div id="statsView" hidden>
+      <div class="tabs">
+        <button class="tab active" data-unit="week" onclick="setStatsUnit('week')">週ごと</button>
+        <button class="tab" data-unit="month" onclick="setStatsUnit('month')">月ごと</button>
+      </div>
+      <div class="card">
+        <table class="stats">
+          <thead><tr><th>期間</th><th>登録</th><th>出品</th><th>出荷済み</th></tr></thead>
+          <tbody id="statsBody"></tbody>
+        </table>
+        <div class="muted stats-note">
+          登録：仕分け日 ／ 出品：出品日 ／ 出荷済み：「出荷済み」にした日 で数えます（週は月曜〜日曜）。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>出品者の登録</summary>
+        <ul class="staff-list" id="staffList"></ul>
+        <div class="toolbar">
+          <input type="text" id="newStaff" placeholder="担当者の名前">
+          <button class="btn-primary" onclick="addStaffName()">追加</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="action-bar" id="actionBar">
+    <div class="action-inner">
+      <div class="action-head">
+        <div><strong id="selectedCount">0</strong>件を選択中</div>
+        <button onclick="clearSelection()">選択解除</button>
+      </div>
+      <!-- 選んだ商品すべてにできる操作の行・ボタンだけを出す（renderActionBar） -->
+      <div class="action-row" data-action="listing">
+        <label>出品者</label>
+        <select id="seller"></select>
+        <span></span>
+      </div>
+      <div class="action-row" data-action="listing">
+        <label>出品日</label>
+        <input type="date" id="listedDate">
+        <button class="btn-primary" onclick="saveListing()">出品登録</button>
+      </div>
+      <!-- 進捗はこのスプレッドシートだけで管理（本体には書き戻さない）。1段階ずつしか動かせない -->
+      <div class="action-row" data-action="next">
+        <label>進捗</label>
+        <span class="progress-info" id="nextInfo"></span>
+        <button class="btn-progress" onclick="moveProgress('next')">進める ▶</button>
+      </div>
+      <div class="action-row" data-action="return">
+        <label>戻り日</label>
+        <input type="date" id="returnDate">
+        <button class="btn-return" onclick="saveReturn()">戻り登録</button>
+      </div>
+      <div class="muted no-action" id="noAction">選んだ商品にできる操作はありません（状態の違う商品が混ざっているときは、状態ごとに選んでください）</div>
+
+      <!-- マイナス方向の操作（キャンセル・戻す・取り消し）は閉じた中にまとめ、押しにくくする -->
+      <details class="minus" id="minusBox" ontoggle="renderActionBar()">
+        <summary>修正・取り消し</summary>
+        <div class="minus-buttons">
+          <button class="btn-minus" data-action="cancel" onclick="moveProgress('cancel')">キャンセル・再出品</button>
+          <button class="btn-minus" data-action="prev" onclick="moveProgress('prev')">◀ 進捗を一つ戻す</button>
+          <button class="btn-minus" data-action="clearListing" onclick="clearFields(['出品者', '出品日'])">出品の取り消し</button>
+          <button class="btn-minus" data-action="clearReturn" onclick="clearFields(['戻り日'])">戻り日の取り消し</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- QR読み取り：読み取ったラベルの商品を選択に加える（カメラを閉じずに続けて読める） -->
+  <div class="camera-area" id="cameraArea" hidden>
+    <div class="camera-modal">
+      <div class="camera-title">QRコード読み取り</div>
+      <div id="reader"></div>
+      <!-- 写真で読み取る：その場のカメラ映像が使えないとき（アクセスを「全員」にした Web アプリなど）でも、
+           スマホの標準カメラで撮った写真から読み取れる -->
+      <label class="btn-photo">
+        写真を撮って読み取る
+        <input type="file" accept="image/*" capture="environment" class="offscreen" onchange="scanPhoto(this)">
+      </label>
+      <div id="readerFile" class="offscreen"></div>
+      <div class="scan-status" id="scanStatus">ラベルのQRコードを読み取ってください</div>
+      <ul class="scan-list" id="scanList"></ul>
+      <button class="btn-primary" onclick="stopScanner()">完了（<span id="scanCount">0</span>件を選択中）</button>
+    </div>
+  </div>
+
+  <div class="message" id="message"></div>
+  <!--
+  QRカメラを2倍ズームにする共通処理（本体の cameraZoom.html と同じ内容）
+  カメラ（Html5Qrcode）の start() が終わった後に applyCameraZoom('読み取り枠のID') を呼ぶ。
+-->
+<script>
+  // カメラ起動時のズーム倍率
+  const CAMERA_ZOOM = 2;
+
+  /**
+   * 読み取り枠の中のカメラ映像にズームを設定する。
+   * 端末が2倍に対応していない場合は、対応する最大倍率にする。
+   * ズーム非対応の端末（PCのカメラなど）では何もしない。
+   */
+  async function applyCameraZoom(readerId, zoom = CAMERA_ZOOM) {
+    const track = await waitForCameraTrack(readerId);
+
+    if (!track || typeof track.getCapabilities !== 'function') {
+      console.log('カメラ映像を取得できないため、ズームを設定しませんでした');
+      return;
+    }
+
+    try {
+      const capabilities = track.getCapabilities();
+
+      if (!capabilities.zoom) {
+        console.log('このカメラはズーム制御に非対応です');
+        return;
+      }
+
+      const minZoom = capabilities.zoom.min ?? 1;
+      const maxZoom = capabilities.zoom.max ?? 1;
+      const appliedZoom = Math.max(minZoom, Math.min(zoom, maxZoom));
+
+      await track.applyConstraints({ advanced: [{ zoom: appliedZoom }] });
+      console.log('カメラズーム適用:', appliedZoom);
+
+    } catch (error) {
+      console.log('ズーム設定に失敗しました', error);
+    }
+  }
+
+  // カメラ映像（video要素）ができるまで少し待ってから映像トラックを返す
+  async function waitForCameraTrack(readerId, timeoutMs = 3000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const video = document.querySelector('#' + readerId + ' video');
+      const track = video && video.srcObject && video.srcObject.getVideoTracks
+        ? video.srcObject.getVideoTracks()[0]
+        : null;
+
+      if (track) return track;
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    return null;
+  }
+</script>
+
+  <script>
+    // ==========================================
+    // 先方管理ページ（外部に置く画面）
+    //  GASの画面はGoogleの枠の中で動きカメラが使えないため、この画面だけ外部（GitHub Pages など）に置き、
+    //  データの読み書きは行先ごとのGAS（アスシア管理GAS / いろは管理GAS）の窓口（doPost）に頼む。
+    //
+    //  開き方：index.html?d=asusia#k=鍵   （d は下の APPS のキー、鍵は各GASの 設定.js の API_TOKEN）
+    //  鍵はこの端末のブラウザに覚えさせ、アドレス欄からは消す（次からは ?d=asusia だけで開ける）
+    // ==========================================
+    const APPS = {
+      asusia: { name: "アスシア", api: "https://script.google.com/macros/s/AKfycbxDvrhoHtfSmfnY4V2LSiGPxtkP4X2xnTMlJSFGn9qXThuu1Vz6jthBBI3lMODEz1jvqQ/exec" },
+      iroha: { name: "いろは", api: "https://script.google.com/macros/s/AKfycbzWsmlJU0kDOBkpAALiYne0bneC8s2ArDpcYUA6HdzFGucF9P1Mv2j2G6bE1fgS9iOSqw/exec" }
+    };
+    const appKey = new URLSearchParams(location.search).get("d") || "";
+    const app = APPS[appKey];
+    const tokenStorageKey = "partner-token-" + appKey;
+    let apiToken = "";
+
+    // 鍵：URLの #k= にあれば覚えて消す。なければ前に覚えたもの
+    (function readToken() {
+      const fromHash = new URLSearchParams(location.hash.slice(1)).get("k");
+      try {
+        if (fromHash) localStorage.setItem(tokenStorageKey, fromHash);
+        apiToken = fromHash || localStorage.getItem(tokenStorageKey) || "";
+      } catch (e) {
+        apiToken = fromHash || "";
+      }
+      if (fromHash) history.replaceState(null, "", location.pathname + location.search);
+    })();
+
+    const TABS = ["未出品", "出品済", "入札あり", "入金済み", "梱包済み", "出荷済み", "戻り", "すべて"];
+
+    let data = { items: [], staff: [], rejected: [] };
+    let currentTab = "未出品";
+    const selected = new Set();
+    const scannedKeys = new Set(); // QRで読み取った商品（「読み取り」タブに出す）
+    let busy = false;
+
+    function esc(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function today() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+
+    function showMessage(text, type) {
+      const el = document.getElementById("message");
+      el.textContent = text;
+      el.className = "message " + type;
+      clearTimeout(showMessage.timer);
+      showMessage.timer = setTimeout(() => { el.className = "message"; }, type === "error" ? 8000 : 3000);
+    }
+
+    // GASの窓口（doPost）を呼ぶ。本文は text/plain の JSON（ブラウザの事前確認が要らない形）
+    function call(name, args, onSuccess) {
+      busy = true;
+      document.querySelectorAll("button").forEach(b => b.disabled = true);
+      const fail = message => { busy = false; enableButtons(); showMessage(message, "error"); };
+      fetch(app.api, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ token: apiToken, fn: name, args: args })
+      })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.ok) return fail(res.error || "エラーが起きました。");
+          busy = false;
+          enableButtons();
+          onSuccess(res.result);
+        })
+        .catch(err => fail("通信できませんでした。電波の状態を確認して、もう一度お試しください。\n（" + (err.message || err) + "）"));
+    }
+
+    function enableButtons() {
+      document.querySelectorAll("button").forEach(b => b.disabled = false);
+    }
+
+    function load() {
+      call("getPartnerData", [], setData);
+    }
+
+    // 在庫表(手入力)・zaiko の今の内容で一覧を作り直す
+    function syncNow() {
+      if (busy) return;
+      document.getElementById("syncInfo").textContent = "同期中…";
+      call("syncNow", [], result => {
+        setData(result);
+        showMessage("同期しました。", "success");
+      });
+    }
+
+    function setData(result) {
+      data = result;
+      // なくなった商品の選択は外す
+      const keys = new Set(data.items.map(i => i["キー"]));
+      Array.from(selected).forEach(k => { if (!keys.has(k)) selected.delete(k); });
+      document.getElementById("syncInfo").textContent =
+        "一覧の更新：" + (data.lastSync || "まだ更新されていません");
+      renderStaff();
+      renderRejected();
+      render();
+      if (currentView === "stats") renderStats();
+    }
+
+    // 今の段階（コード.js の flowStageOf_ と同じ）
+    function flowStageOf(item) {
+      const flow = data.progressFlow || [];
+      if (flow.indexOf(item["進捗"]) >= 2) return item["進捗"];
+      return item["出品日"] ? "出品済" : "未出品";
+    }
+
+    // 1段階進めた・戻した段階。動かせなければ理由の文字列を返す（コード.js の nextFlowStage_ と同じ判定）
+    function nextFlowStage(item, direction) {
+      const flow = data.progressFlow || [];
+      const id = item["商品ID"];
+      const stage = flowStageOf(item);
+      const i = flow.indexOf(stage);
+      if (item["状態"] === "戻り") return { error: id + " は戻りのため進捗を変えられません。" };
+      if (direction === "cancel") {
+        const allowed = data.cancelAllowedStages || [];
+        if (allowed.indexOf(stage) === -1) {
+          return { error: id + " は「" + stage + "」のためキャンセル・再出品できません（できるのは " + allowed.join("・") + " の商品です）。" };
+        }
+        return { from: stage, to: "出品済" };
+      }
+      if (direction === "next") {
+        if (stage === "未出品") return { error: id + " は未出品です。先に出品登録してください。" };
+        if (i === flow.length - 1) return { error: id + " はすでに出荷済みです。" };
+        return { from: stage, to: flow[i + 1] };
+      }
+      if (stage === "未出品") return { error: id + " は未出品のため戻せません。" };
+      if (stage === "出品済") return { error: id + " を未出品に戻すときは「出品の取り消し」を使ってください。" };
+      return { from: stage, to: flow[i - 1] };
+    }
+
+    // 選んだ商品の進捗を1段階進める・戻す（商品ごとに今の段階から動かす）
+    function moveProgress(direction) {
+      if (busy) return;
+      const items = selectedItems();
+      if (!items.length) return;
+      const moves = items.map(i => nextFlowStage(i, direction));
+      const errors = moves.filter(m => m.error).map(m => m.error);
+      if (errors.length) return showMessage(errors.slice(0, 5).join("\n") + (errors.length > 5 ? "\nほか" + (errors.length - 5) + "件" : ""), "error");
+
+      const lines = items.map((item, n) => item["商品ID"] + "：" + moves[n].from + " → " + moves[n].to);
+      const label = { next: "進捗を進めます", prev: "進捗を一つ戻します", cancel: "キャンセルして再出品（出品済）に戻します" }[direction];
+      if (!confirm(label + "。\n\n" + lines.slice(0, 10).join("\n") +
+        (lines.length > 10 ? "\nほか" + (lines.length - 10) + "件" : ""))) return;
+      call("moveProgress", [items.map(i => i["キー"]), direction], result => {
+        selected.clear();
+        setData(result);
+        const done = { next: "進捗を進めました。", prev: "進捗を一つ戻しました。", cancel: "キャンセル・再出品にしました。" }[direction];
+        showMessage(done + "（" + items.length + "件）", "success");
+      });
+    }
+
+    function inTab(item) {
+      if (currentTab === "読み取り") return scannedKeys.has(item["キー"]);
+      return currentTab === "すべて" || item["状態"] === currentTab;
+    }
+
+    function matches(item) {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      if (!q) return true;
+      return (item["商品ID"] + " " + item["商品名"]).toLowerCase().indexOf(q) !== -1;
+    }
+
+    function visibleItems() {
+      return data.items.filter(i => inTab(i) && matches(i));
+    }
+
+    function render() {
+      // タブ（件数付き）
+      // QRで読み取った商品があれば先頭に「読み取り」タブを出す
+      const tabs = (scannedKeys.size ? ["読み取り"] : []).concat(TABS);
+      document.getElementById("tabs").innerHTML = tabs.map(t => {
+        const n = t === "すべて" ? data.items.length
+          : t === "読み取り" ? data.items.filter(i => scannedKeys.has(i["キー"])).length
+          : data.items.filter(i => i["状態"] === t).length;
+        return '<button class="tab' + (t === currentTab ? " active" : "") + '" onclick="setTab(\'' + t + '\')">' +
+          esc(t) + '<span class="count">' + n + '</span></button>';
+      }).join("");
+
+      const items = visibleItems();
+      const list = document.getElementById("list");
+      if (!items.length) {
+        list.innerHTML = '<div class="empty">該当する商品はありません</div>';
+      } else {
+        list.innerHTML = items.map(item => {
+          const key = item["キー"];
+          const checked = selected.has(key);
+          const meta = [
+            "仕分け日 " + (item["仕分け日"] || "-"),
+            item["出品者"] ? "出品者 " + item["出品者"] : "",
+            item["出品日"] ? "出品日 " + item["出品日"] : "",
+            item["戻り日"] ? "戻り日 " + item["戻り日"] : "",
+            Number(item["再出品回数"]) > 0 ? "再出品 " + item["再出品回数"] + "回" : ""
+          ].filter(Boolean);
+          return '<div class="item' + (checked ? " selected" : "") + '" data-key="' + esc(key) + '" onclick="toggleItem(this.dataset.key)">' +
+            '<input type="checkbox"' + (checked ? " checked" : "") + ' tabindex="-1">' +
+            '<div class="item-body">' +
+              '<div class="item-head"><span class="item-id">' + esc(item["商品ID"]) + '</span>' +
+                '<span class="badge ' + esc(item["状態"]) + '">' + esc(item["状態"]) + '</span>' +
+                (item.pending ? '<span class="badge pending">本体反映待ち</span>' : '') +
+              '</div>' +
+              '<div class="item-name">' + esc(item["商品名"]) + '</div>' +
+              '<div class="item-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join("") + '</div>' +
+            '</div></div>';
+        }).join("");
+      }
+
+      const allSelected = items.length > 0 && items.every(i => selected.has(i["キー"]));
+      document.getElementById("toggleAllBtn").textContent = allSelected ? "全解除" : "全選択";
+      renderActionBar();
+    }
+
+    // 商品1件にできる操作（コード.js の checkListingAllowed_ / checkReturnAllowed_ / nextFlowStage_ と同じ判定）
+    function allowedActions(item) {
+      const flow = data.progressFlow || [];
+      const stage = flowStageOf(item);
+      const i = flow.indexOf(stage);
+      const returned = item["状態"] === "戻り";
+      return {
+        listing: !returned && stage === "未出品",
+        next: !returned && i >= 1 && i < flow.length - 1,
+        return: returned || (data.returnAllowedStages || []).indexOf(stage) !== -1,
+        cancel: !returned && (data.cancelAllowedStages || []).indexOf(stage) !== -1,
+        prev: !returned && i >= 2,
+        clearListing: !returned && stage === "出品済",
+        clearReturn: !!item["戻り日"]
+      };
+    }
+
+    // 選んだ商品すべてにできる操作のボタンだけを出す
+    function renderActionBar() {
+      document.getElementById("selectedCount").textContent = selected.size;
+      const bar = document.getElementById("actionBar");
+      bar.classList.toggle("show", selected.size > 0);
+
+      const items = selectedItems();
+      const all = name => items.length > 0 && items.every(i => allowedActions(i)[name]);
+      bar.querySelectorAll("[data-action]").forEach(el => { el.hidden = !all(el.dataset.action); });
+
+      // 進めた先（全部同じ段階なら「出品済 → 入札あり」と出す）
+      const stages = Array.from(new Set(items.map(flowStageOf)));
+      const flow = data.progressFlow || [];
+      document.getElementById("nextInfo").textContent =
+        stages.length === 1 && all("next") ? stages[0] + " → " + flow[flow.indexOf(stages[0]) + 1] : "";
+
+      const mainActions = ["listing", "next", "return"].some(all);
+      const minusActions = ["cancel", "prev", "clearListing", "clearReturn"].some(all);
+      document.getElementById("minusBox").hidden = !minusActions;
+      // 選択がなくなったら閉じておく（次に選んだときに開いたままにしない）
+      if (!minusActions || !items.length) document.getElementById("minusBox").open = false;
+      document.getElementById("noAction").hidden = mainActions || minusActions;
+
+      // 一覧の最後の商品が入力欄に隠れないよう、入力欄の高さ分だけ下を空ける
+      document.body.style.paddingBottom = (selected.size > 0 ? bar.offsetHeight + 16 : 16) + "px";
+    }
+
+    function renderStaff() {
+      const sel = document.getElementById("seller");
+      const prev = sel.value;
+      sel.innerHTML = data.staff.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join("");
+      if (data.staff.indexOf(prev) !== -1) sel.value = prev;
+
+      document.getElementById("staffList").innerHTML = data.staff.map(s =>
+        '<li><span>' + esc(s) + '</span><button class="btn-danger" data-name="' + esc(s) + '" onclick="removeStaffName(this.dataset.name)">削除</button></li>'
+      ).join("");
+    }
+
+    function renderRejected() {
+      const card = document.getElementById("rejectedCard");
+      card.style.display = data.rejected.length ? "" : "none";
+      document.getElementById("rejectedCount").textContent = data.rejected.length;
+      document.getElementById("rejectedList").innerHTML = data.rejected.map(r =>
+        '<li>' + esc(r.time) + ' ' + esc(r.id) + ' ' + esc(r.field) + '「' + esc(r.value || "取り消し") + '」：' + esc(r.result) + '</li>'
+      ).join("");
+    }
+
+    function setTab(tab) {
+      currentTab = tab;
+      render();
+    }
+
+    // ==========================================
+    // 一覧 / 集計 の切り替え
+    // ==========================================
+    let currentView = "list";
+    let statsUnit = "week";
+
+    function setView(view) {
+      currentView = view;
+      document.querySelectorAll(".view-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+      document.getElementById("listView").hidden = view !== "list";
+      document.getElementById("statsView").hidden = view !== "stats";
+      // 集計中は入力欄を出さない
+      if (view !== "list") clearSelection();
+      if (view === "stats") renderStats();
+    }
+
+    function setStatsUnit(unit) {
+      statsUnit = unit;
+      document.querySelectorAll("[data-unit]").forEach(b => b.classList.toggle("active", b.dataset.unit === unit));
+      renderStats();
+    }
+
+    // "yyyy/MM/dd"（後ろに時刻があってもよい）→ Date。読めなければ null
+    function parseDay(text) {
+      const m = String(text || "").match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+      return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+    }
+
+    function ymd(d) {
+      return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
+    }
+
+    // 期間の始まりの日（週：その週の月曜日 / 月：1日）
+    function periodStart(d, unit) {
+      if (unit === "month") return new Date(d.getFullYear(), d.getMonth(), 1);
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+    }
+
+    // 次の期間の始まりの日
+    function nextPeriod(start, unit) {
+      return unit === "month"
+        ? new Date(start.getFullYear(), start.getMonth() + 1, 1)
+        : new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+    }
+
+    function periodLabel(start, unit) {
+      if (unit === "month") return start.getFullYear() + "年" + (start.getMonth() + 1) + "月";
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+      return ymd(start) + "〜" + (end.getMonth() + 1) + "/" + end.getDate();
+    }
+
+    /**
+     * 期間ごとの件数（新しい期間から）。間の0件の期間も出す
+     *   登録：仕分け日 / 出品：出品日 / 出荷済み：進捗が出荷済みの商品の進捗更新日時
+     */
+    function buildStats(items, unit) {
+      const counts = {};
+      let first = null;
+      let last = periodStart(new Date(), unit); // 今の期間まで（データがそれより先にあればそこまで）
+      const add = (text, field) => {
+        const d = parseDay(text);
+        if (!d) return;
+        const start = periodStart(d, unit);
+        const key = ymd(start);
+        (counts[key] = counts[key] || { 登録: 0, 出品: 0, 出荷済み: 0 })[field]++;
+        if (!first || start < first) first = start;
+        if (start > last) last = start;
+      };
+      items.forEach(i => {
+        add(i["仕分け日"], "登録");
+        add(i["出品日"], "出品");
+        if (i["進捗"] === "出荷済み") add(i["進捗更新日時"], "出荷済み");
+      });
+      if (!first) return [];
+
+      const rows = [];
+      for (let p = first; p <= last; p = nextPeriod(p, unit)) {
+        const c = counts[ymd(p)] || { 登録: 0, 出品: 0, 出荷済み: 0 };
+        rows.push({ label: periodLabel(p, unit), 登録: c.登録, 出品: c.出品, 出荷済み: c.出荷済み });
+      }
+      return rows.reverse();
+    }
+
+    function renderStats() {
+      const rows = buildStats(data.items || [], statsUnit);
+      const cell = n => '<td class="' + (n ? "" : "zero") + '">' + n + '</td>';
+      const total = rows.reduce((t, r) => ({ 登録: t.登録 + r.登録, 出品: t.出品 + r.出品, 出荷済み: t.出荷済み + r.出荷済み }),
+        { 登録: 0, 出品: 0, 出荷済み: 0 });
+      document.getElementById("statsBody").innerHTML = rows.length
+        ? rows.map(r => '<tr><td>' + esc(r.label) + '</td>' + cell(r.登録) + cell(r.出品) + cell(r.出荷済み) + '</tr>').join("") +
+          '<tr class="total"><td>合計</td><td>' + total.登録 + '</td><td>' + total.出品 + '</td><td>' + total.出荷済み + '</td></tr>'
+        : '<tr><td colspan="4" class="empty">まだデータがありません</td></tr>';
+    }
+
+    function toggleItem(key) {
+      if (selected.has(key)) selected.delete(key); else selected.add(key);
+      render();
+    }
+
+    function toggleAll() {
+      const items = visibleItems();
+      const allSelected = items.length > 0 && items.every(i => selected.has(i["キー"]));
+      items.forEach(i => allSelected ? selected.delete(i["キー"]) : selected.add(i["キー"]));
+      render();
+    }
+
+    function clearSelection() {
+      selected.clear();
+      render();
+    }
+
+    // ==========================================
+    // QR読み取り
+    //  ラベルのQR（商品ID：A001 / 6J-A001 など）を読み取り、その商品を選択に加える。
+    //  カメラは閉じずに続けて読める。「完了」で閉じると「読み取り」タブに読み取った商品が並ぶ
+    // ==========================================
+    let scanner = null;     // その場のカメラ映像で読み取る
+    let fileScanner = null; // 撮った写真から読み取る
+    let lastScan = { text: "", time: 0 };
+
+    // 全角英数を半角にして大文字にそろえる（本体の toHalfWidth と同じ考え方）
+    function normId(v) {
+      return String(v == null ? "" : v).replace(/[Ａ-Ｚａ-ｚ０-９－]/g,
+        c => c === "－" ? "-" : String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim().toUpperCase();
+    }
+
+    // 読み取った文字から商品を探す。ちょうど一致がなければ、文字の中に商品IDが含まれる商品（長いIDを優先）
+    function findScannedItem(text) {
+      const code = normId(text);
+      if (!code) return null;
+      const exact = data.items.find(i => normId(i["商品ID"]) === code);
+      if (exact) return exact;
+      return data.items
+        .filter(i => i["商品ID"] && code.indexOf(normId(i["商品ID"])) !== -1)
+        .sort((a, b) => b["商品ID"].length - a["商品ID"].length)[0] || null;
+    }
+
+    function setScanStatus(text, type) {
+      const el = document.getElementById("scanStatus");
+      el.textContent = text;
+      el.className = "scan-status" + (type ? " " + type : "");
+    }
+
+    function renderScanList() {
+      const items = data.items.filter(i => scannedKeys.has(i["キー"]));
+      document.getElementById("scanCount").textContent = selected.size;
+      document.getElementById("scanList").innerHTML = items.map(i =>
+        '<li><span class="item-id">' + esc(i["商品ID"]) + '</span>' +
+        '<span class="badge ' + esc(i["状態"]) + '">' + esc(i["状態"]) + '</span>' +
+        '<span class="scan-name">' + esc(i["商品名"]) + '</span></li>'
+      ).join("");
+    }
+
+    function onScan(text) {
+      // 同じQRを続けて読んだときは3秒間無視する
+      const now = Date.now();
+      if (text === lastScan.text && now - lastScan.time < 3000) return;
+      lastScan = { text: text, time: now };
+
+      const item = findScannedItem(text);
+      if (!item) {
+        setScanStatus("「" + text + "」は一覧にありません。\n" + (data.destination || "") +
+          "の商品か、仕分け日が2026/09/01以降かを確認してください（登録したばかりなら「今すぐ同期」）。", "error");
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+        return;
+      }
+      const key = item["キー"];
+      const already = selected.has(key);
+      selected.add(key);
+      scannedKeys.add(key);
+      setScanStatus((already ? "選択済み：" : "選択しました：") + item["商品ID"] + "（" + item["状態"] + "）\n" + item["商品名"], "success");
+      if (navigator.vibrate) navigator.vibrate(60);
+      renderScanList();
+    }
+
+    function startScanner() {
+      if (typeof Html5Qrcode === "undefined") {
+        return showMessage("QR読み取りの部品を読み込めませんでした。通信状態を確認して再読み込みしてください。", "error");
+      }
+      // 選択がなければ新しい読み取りとして始める（選択があれば続きとして追加する）
+      if (!selected.size) scannedKeys.clear();
+      document.getElementById("cameraArea").hidden = false;
+      setScanStatus("ラベルのQRコードを読み取ってください", "");
+      renderScanList();
+
+      document.getElementById("reader").hidden = false;
+      if (!scanner) scanner = new Html5Qrcode("reader");
+      if (scanner.isScanning) return;
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 200, height: 200 }, aspectRatio: 1.0 },
+        onScan,
+        () => {} // 読み取れなかったフレームは無視
+      ).then(() => {
+        document.getElementById("reader").hidden = false;
+        applyCameraZoom("reader"); // 2倍ズーム（cameraZoom.html）
+      }).catch(err => {
+        // その場のカメラ映像が使えないときは、閉じずに「写真を撮って読み取る」へ案内する
+        console.error("カメラ起動エラー", err);
+        document.getElementById("reader").hidden = true;
+        setScanStatus("この画面ではカメラの映像を直接使えません。\n上の「写真を撮って読み取る」でラベルを撮影してください。" +
+          "\n（" + ((err && (err.name || err.message)) || err) + "）", "error");
+      });
+    }
+
+    // 写真を長辺1280pxまで縮小する（スマホの大きな写真のままだと読み取りが遅い・失敗するため）
+    function shrinkImage(file, maxSize) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(img.src);
+          canvas.toBlob(blob => blob ? resolve(new File([blob], "scan.jpg", { type: "image/jpeg" })) : reject(new Error("画像を読み込めません")),
+            "image/jpeg", 0.9);
+        };
+        img.onerror = () => reject(new Error("画像を読み込めません"));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    // 撮った写真からQRを読み取って商品を選ぶ
+    function scanPhoto(input) {
+      const file = input.files && input.files[0];
+      input.value = ""; // 同じ写真をもう一度選んでも動くように
+      if (!file) return;
+      setScanStatus("写真を読み取り中…", "");
+      if (!fileScanner) fileScanner = new Html5Qrcode("readerFile");
+      shrinkImage(file, 1280)
+        .then(small => fileScanner.scanFile(small, false))
+        .then(text => {
+          lastScan = { text: "", time: 0 }; // 写真は同じQRでも毎回受け付ける
+          onScan(text);
+        })
+        .catch(err => {
+          console.error("写真の読み取りエラー", err);
+          setScanStatus("写真からQRコードを読み取れませんでした。\nQRが大きく、ピントが合うように撮り直してください。", "error");
+          if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+        });
+    }
+
+    function stopScanner() {
+      const close = () => {
+        document.getElementById("cameraArea").hidden = true;
+        // 読み取った商品があれば「読み取り」タブで見せる
+        if (scannedKeys.size) {
+          currentTab = "読み取り";
+          document.getElementById("search").value = "";
+        }
+        render();
+      };
+      if (scanner && scanner.isScanning) {
+        scanner.stop().then(close).catch(close);
+      } else {
+        close();
+      }
+    }
+
+    function selectedItems() {
+      return data.items.filter(i => selected.has(i["キー"]));
+    }
+
+    function save(fields, confirmText, doneText) {
+      if (busy) return;
+      const items = selectedItems();
+      if (!items.length) return;
+      const ids = items.map(i => i["商品ID"]);
+      const list = ids.slice(0, 10).join("、") + (ids.length > 10 ? " ほか" + (ids.length - 10) + "件" : "");
+      if (!confirm(confirmText + "\n\n対象：" + items.length + "件\n" + list)) return;
+      call("saveEntries", [items.map(i => i["キー"]), fields], result => {
+        selected.clear();
+        setData(result);
+        showMessage(doneText + "（" + items.length + "件）", "success");
+      });
+    }
+
+    function saveListing() {
+      const seller = document.getElementById("seller").value;
+      const date = document.getElementById("listedDate").value;
+      if (!seller) return showMessage("出品者を選んでください。", "error");
+      if (!date) return showMessage("出品日を入力してください。", "error");
+      save({ "出品者": seller, "出品日": date },
+        "出品者「" + seller + "」・出品日 " + date + " で出品登録します。", "出品登録しました。");
+    }
+
+    function saveReturn() {
+      const date = document.getElementById("returnDate").value;
+      if (!date) return showMessage("戻り日を入力してください。", "error");
+      // 戻り登録（返品）できるのは決まった段階の商品だけ（コード.js の checkReturnAllowed_ と同じ）
+      const allowed = data.returnAllowedStages || [];
+      const ng = selectedItems().filter(i => i["状態"] !== "戻り" && allowed.indexOf(flowStageOf(i)) === -1);
+      if (ng.length) {
+        return showMessage("戻り登録できるのは " + allowed.join("・") + " の商品です：\n" +
+          ng.slice(0, 5).map(i => i["商品ID"] + "（" + flowStageOf(i) + "）").join("、") +
+          (ng.length > 5 ? " ほか" + (ng.length - 5) + "件" : ""), "error");
+      }
+      save({ "戻り日": date }, "戻り日 " + date + " で戻り登録します。", "戻り登録しました。");
+    }
+
+    function clearFields(names) {
+      const fields = {};
+      names.forEach(n => { fields[n] = ""; });
+      save(fields, names.join("・") + " を取り消します。", names.join("・") + " を取り消しました。");
+    }
+
+    function addStaffName() {
+      const input = document.getElementById("newStaff");
+      const name = input.value.trim();
+      if (!name) return showMessage("名前を入力してください。", "error");
+      call("addStaff", [name], staff => {
+        input.value = "";
+        data.staff = staff;
+        renderStaff();
+        showMessage("「" + name + "」を追加しました。", "success");
+      });
+    }
+
+    function removeStaffName(name) {
+      if (!confirm("出品者「" + name + "」を削除しますか？\n（入力済みの商品の出品者は変わりません）")) return;
+      call("removeStaff", [name], staff => {
+        data.staff = staff;
+        renderStaff();
+        showMessage("「" + name + "」を削除しました。", "success");
+      });
+    }
+
+    document.getElementById("listedDate").value = today();
+    document.getElementById("returnDate").value = today();
+
+    // 行先（?d=）と鍵がそろっていれば読み込む。足りなければ案内だけ出す
+    if (!app) {
+      document.getElementById("list").innerHTML =
+        '<div class="empty">URLが正しくありません。案内された商品管理ページのURLを開いてください。</div>';
+      document.getElementById("syncInfo").textContent = "";
+    } else {
+      document.title = app.name + " 商品管理";
+      document.getElementById("pageTitle").textContent = app.name + " 商品管理";
+      if (!apiToken) {
+        document.getElementById("list").innerHTML =
+          '<div class="empty">鍵がありません。案内された商品管理ページのURL（#k= 付き）を一度開いてください。</div>';
+        document.getElementById("syncInfo").textContent = "";
+      } else {
+        load();
+      }
+    }
+  </script>
+</body>
+</html>
