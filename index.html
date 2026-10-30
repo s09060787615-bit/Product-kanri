@@ -37,6 +37,37 @@
     table.stats tr.total td { font-weight: 700; border-top: 2px solid #e5e7eb; }
     .stats-note { margin-top: 8px; }
 
+    /* 出品準備 */
+    .prep-area {
+      position: fixed; inset: 0; z-index: 15;
+      background: rgba(0, 0, 0, .55);
+      display: flex; justify-content: center; align-items: flex-start;
+      padding: 10px; overflow-y: auto;
+    }
+    .prep-area[hidden] { display: none; }
+    .prep-modal {
+      width: 100%; max-width: 640px; background: #fff; border-radius: 12px; padding: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .prep-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
+    .prep-head button { padding: 6px 12px; font-size: 13px; }
+    .prep-images { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+    .prep-images .img {
+      position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden;
+      background: #f3f4f6; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #6b7280;
+    }
+    .prep-images img { width: 100%; height: 100%; object-fit: cover; }
+    .prep-images .no { position: absolute; left: 3px; top: 3px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 0 5px; border-radius: 4px; }
+    .prep-images .del { position: absolute; right: 3px; top: 3px; padding: 0 6px; font-size: 12px; background: rgba(255,255,255,.9); border-radius: 4px; }
+    .prep-field { display: flex; flex-direction: column; gap: 4px; }
+    .prep-field label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .prep-field input, .prep-field select, .prep-field textarea, .template-form input, .template-form textarea {
+      width: 100%; padding: 8px; font-size: 15px; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit;
+    }
+    .btn-copy { margin-left: auto; padding: 3px 10px; font-size: 12px; font-weight: 500; }
+    .template-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .badge.prepared { background: #fff; border: 1px solid #0d9488; color: #0f766e; }
+
     /* 印刷：入力欄 */
     .print-form { display: flex; flex-direction: column; gap: 8px; }
     .print-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -364,6 +395,19 @@
         </div>
       </details>
     </div>
+
+    <!-- 出品準備で商品説明の最後に差し込むテンプレート -->
+    <div class="card">
+      <details>
+        <summary>テンプレートの登録</summary>
+        <ul class="staff-list" id="templateList"></ul>
+        <div class="template-form">
+          <input type="text" id="templateName" placeholder="テンプレートの名前（同じ名前なら上書き）">
+          <textarea id="templateBody" rows="6" placeholder="説明文の最後に差し込む文章（発送方法・注意事項など）"></textarea>
+          <button class="btn-primary" onclick="saveTemplateForm()">保存</button>
+        </div>
+      </details>
+    </div>
   </div>
 
   <div class="action-bar" id="actionBar">
@@ -388,6 +432,12 @@
         <label>進捗</label>
         <span class="progress-info" id="nextInfo"></span>
         <button class="btn-progress" onclick="moveProgress('next')">進める ▶</button>
+      </div>
+      <!-- 出品準備：未出品の商品を1件だけ選んだときに出す -->
+      <div class="action-row" data-action="prep">
+        <label>準備</label>
+        <span class="progress-info">画像・AIで商品名と説明文</span>
+        <button class="btn-primary" onclick="openPrep()">出品準備</button>
       </div>
       <div class="action-row" data-action="return">
         <label>戻り日</label>
@@ -424,6 +474,42 @@
       <div class="scan-status" id="scanStatus">ラベルのQRコードを読み取ってください</div>
       <ul class="scan-list" id="scanList"></ul>
       <button class="btn-primary" onclick="stopScanner()">完了（<span id="scanCount">0</span>件を選択中）</button>
+    </div>
+  </div>
+
+  <!-- 出品準備（簡易版）：画像をドライブに保存 → 先頭3枚をAIで解析 → 商品名・商品説明（＋テンプレート）を保存 -->
+  <div class="prep-area" id="prepArea" hidden>
+    <div class="prep-modal">
+      <div class="prep-head">
+        <div><span class="item-id" id="prepId"></span> <span id="prepName"></span></div>
+        <button onclick="closePrep()">閉じる</button>
+      </div>
+
+      <div class="prep-images" id="prepImages"></div>
+      <label class="btn-photo">
+        写真を追加（複数選べます）
+        <input type="file" accept="image/*" multiple class="offscreen" onchange="addPrepImages(this)">
+      </label>
+      <div class="muted">画像はドライブの「<span class="prep-dest"></span> / 年 / 月 / 商品ID_商品名」フォルダに保存します。AIの解析には先頭3枚を使います。</div>
+
+      <div class="prep-field">
+        <label>テンプレート</label>
+        <select id="prepTemplate" onchange="applyPrepTemplate()"></select>
+      </div>
+      <button class="btn-progress" onclick="analyzePrep()">AIで商品名・説明文を作る</button>
+
+      <div class="prep-field">
+        <label>商品名 <span class="muted" id="prepTitleCount"></span>
+          <button class="btn-copy" onclick="copyPrep('prepTitle')">コピー</button></label>
+        <input type="text" id="prepTitle" oninput="countPrep()">
+      </div>
+      <div class="prep-field">
+        <label>商品説明 <span class="muted" id="prepDescCount"></span>
+          <button class="btn-copy" onclick="copyPrep('prepDesc')">コピー</button></label>
+        <textarea id="prepDesc" rows="12" oninput="countPrep()"></textarea>
+      </div>
+      <div class="scan-status" id="prepStatus" hidden></div>
+      <button class="btn-primary" onclick="savePrep()">保存</button>
     </div>
   </div>
 
@@ -590,6 +676,7 @@
       document.getElementById("syncInfo").textContent =
         "一覧の更新：" + (data.lastSync || "まだ更新されていません");
       renderStaff();
+      renderTemplates();
       renderRejected();
       render();
       if (currentView === "stats") renderStats();
@@ -696,6 +783,7 @@
               '<div class="item-head"><span class="item-id">' + esc(item["商品ID"]) + '</span>' +
                 '<span class="badge ' + esc(item["状態"]) + '">' + esc(item["状態"]) + '</span>' +
                 (item.pending ? '<span class="badge pending">本体反映待ち</span>' : '') +
+                (item.prepared ? '<span class="badge prepared">出品準備あり</span>' : '') +
               '</div>' +
               '<div class="item-name">' + esc(item["商品名"]) + '</div>' +
               '<div class="item-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join("") + '</div>' +
@@ -721,7 +809,8 @@
         cancel: !returned && (data.cancelAllowedStages || []).indexOf(stage) !== -1,
         prev: !returned && i >= 2,
         clearListing: !returned && stage === "出品済",
-        clearReturn: !!item["戻り日"]
+        clearReturn: !!item["戻り日"],
+        prep: !returned && stage === "未出品" // 出品準備（1件だけ選んだときに出す。renderActionBar で件数を見る）
       };
     }
 
@@ -732,7 +821,9 @@
       bar.classList.toggle("show", selected.size > 0);
 
       const items = selectedItems();
-      const all = name => items.length > 0 && items.every(i => allowedActions(i)[name]);
+      // 出品準備は1件だけ選んだときだけ
+      const all = name => items.length > 0 && (name !== "prep" || items.length === 1) &&
+        items.every(i => allowedActions(i)[name]);
       bar.querySelectorAll("[data-action]").forEach(el => { el.hidden = !all(el.dataset.action); });
 
       // 進めた先（全部同じ段階なら「出品済 → 入札あり」と出す）
@@ -741,7 +832,7 @@
       document.getElementById("nextInfo").textContent =
         stages.length === 1 && all("next") ? stages[0] + " → " + flow[flow.indexOf(stages[0]) + 1] : "";
 
-      const mainActions = ["listing", "next", "return"].some(all);
+      const mainActions = ["listing", "prep", "next", "return"].some(all);
       const minusActions = ["cancel", "prev", "clearListing", "clearReturn"].some(all);
       document.getElementById("minusBox").hidden = !minusActions;
       // 選択がなくなったら閉じておく（次に選んだときに開いたままにしない）
@@ -750,6 +841,234 @@
 
       // 一覧の最後の商品が入力欄に隠れないよう、入力欄の高さ分だけ下を空ける
       document.body.style.paddingBottom = (selected.size > 0 ? bar.offsetHeight + 16 : 16) + "px";
+    }
+
+    // ==========================================
+    // テンプレートの登録（出品準備で商品説明の最後に差し込む）
+    // ==========================================
+    function renderTemplates() {
+      const list = data.templates || [];
+      document.getElementById("templateList").innerHTML = list.length
+        ? list.map((t, i) =>
+          '<li><span>' + esc(t.name) + '</span><span>' +
+          '<button data-i="' + i + '" onclick="editTemplate(this.dataset.i)">編集</button> ' +
+          '<button class="btn-danger" data-i="' + i + '" onclick="deleteTemplateItem(this.dataset.i)">削除</button></span></li>').join("")
+        : '<li class="muted">まだ登録されていません</li>';
+    }
+
+    function editTemplate(i) {
+      const t = (data.templates || [])[i];
+      if (!t) return;
+      document.getElementById("templateName").value = t.name;
+      document.getElementById("templateBody").value = t.body;
+    }
+
+    function saveTemplateForm() {
+      const name = document.getElementById("templateName").value.trim();
+      const body = document.getElementById("templateBody").value;
+      if (!name) return showMessage("テンプレートの名前を入力してください。", "error");
+      call("saveTemplate", [name, body], templates => {
+        data.templates = templates;
+        document.getElementById("templateName").value = "";
+        document.getElementById("templateBody").value = "";
+        renderTemplates();
+        showMessage("テンプレート「" + name + "」を保存しました。", "success");
+      });
+    }
+
+    function deleteTemplateItem(i) {
+      const t = (data.templates || [])[i];
+      if (!t || !confirm("テンプレート「" + t.name + "」を削除しますか？")) return;
+      call("deleteTemplate", [t.name], templates => {
+        data.templates = templates;
+        renderTemplates();
+        showMessage("テンプレート「" + t.name + "」を削除しました。", "success");
+      });
+    }
+
+    // ==========================================
+    // 出品準備（簡易版）
+    //  画像をドライブに保存 → 先頭3枚をAIで解析 → 商品名（65文字）・商品説明（＋テンプレート）を保存
+    //  データは先方スプレッドシートの「出品準備」シート（出品準備.js）
+    // ==========================================
+    let prep = null; // { key, id, name, images: [{id, preview}], template, titleMax }
+
+    // 窓口（doPost）を呼んで結果を返す（Promise 版。画像を1枚ずつ送るときに使う）
+    function api(name, args) {
+      return fetch(app.api, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ token: apiToken, fn: name, args: args })
+      }).then(r => r.json()).then(res => {
+        if (!res.ok) throw new Error(res.error || "エラーが起きました。");
+        return res.result;
+      });
+    }
+
+    function setPrepStatus(text, type) {
+      const el = document.getElementById("prepStatus");
+      el.hidden = !text;
+      el.textContent = text || "";
+      el.className = "scan-status" + (type ? " " + type : "");
+    }
+
+    function openPrep() {
+      const item = selectedItems()[0];
+      if (!item) return;
+      document.getElementById("prepArea").hidden = false;
+      document.getElementById("prepId").textContent = item["商品ID"];
+      document.getElementById("prepName").textContent = item["商品名"];
+      document.querySelectorAll(".prep-dest").forEach(el => { el.textContent = data.destination || ""; });
+      document.getElementById("prepImages").innerHTML = '<div class="muted">読み込み中…</div>';
+      document.getElementById("prepTitle").value = "";
+      document.getElementById("prepDesc").value = "";
+      setPrepStatus("", "");
+      prep = null;
+      api("getListingPrep", [item["キー"]]).then(res => {
+        prep = res;
+        data.templates = res.templates;
+        renderTemplates();
+        const sel = document.getElementById("prepTemplate");
+        sel.innerHTML = '<option value="">テンプレートなし</option>' +
+          res.templates.map(t => '<option value="' + esc(t.name) + '">' + esc(t.name) + '</option>').join("");
+        sel.value = res.templates.some(t => t.name === res.template) ? res.template : "";
+        prep.template = sel.value;
+        document.getElementById("prepTitle").value = res.title || "";
+        document.getElementById("prepDesc").value = res.description || "";
+        renderPrepImages();
+        countPrep();
+      }).catch(err => setPrepStatus(err.message, "error"));
+    }
+
+    function closePrep() {
+      document.getElementById("prepArea").hidden = true;
+      prep = null;
+    }
+
+    function renderPrepImages() {
+      const box = document.getElementById("prepImages");
+      if (!prep || !prep.images.length) {
+        box.innerHTML = '<div class="muted">まだ画像がありません</div>';
+        return;
+      }
+      box.innerHTML = prep.images.map((img, i) =>
+        '<div class="img">' + (img.preview ? '<img src="' + esc(img.preview) + '" alt="">' : '画像' + (i + 1)) +
+        '<span class="no">' + (i + 1) + '</span>' +
+        '<button class="del" data-id="' + esc(img.id) + '" onclick="removePrepImage(this.dataset.id)">×</button></div>'
+      ).join("");
+    }
+
+    // ファイルを base64（data URL の後ろ）にする
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1]);
+        r.onerror = () => reject(new Error("画像を読み込めません"));
+        r.readAsDataURL(file);
+      });
+    }
+
+    // 選んだ写真を縮小して1枚ずつドライブに保存する
+    async function addPrepImages(input) {
+      const files = Array.from(input.files || []);
+      input.value = "";
+      if (!prep || !files.length) return;
+      for (let n = 0; n < files.length; n++) {
+        setPrepStatus("画像を保存中… " + (n + 1) + " / " + files.length, "");
+        try {
+          const small = await shrinkImage(files[n], 1600);
+          const res = await api("uploadListingImage", [prep.key, await toBase64(small), "image/jpeg"]);
+          prep.images.push({ id: res.id, preview: URL.createObjectURL(small) });
+          renderPrepImages();
+        } catch (err) {
+          return setPrepStatus((n + 1) + "枚目を保存できませんでした：" + err.message, "error");
+        }
+      }
+      setPrepStatus(files.length + "枚の画像を保存しました。", "success");
+      markPrepared();
+    }
+
+    function removePrepImage(fileId) {
+      if (!prep || !confirm("この画像を外しますか？（ドライブのファイルは残ります）")) return;
+      api("removeListingImage", [prep.key, fileId]).then(() => {
+        prep.images = prep.images.filter(img => img.id !== fileId);
+        renderPrepImages();
+      }).catch(err => setPrepStatus(err.message, "error"));
+    }
+
+    function templateBody(name) {
+      const t = (data.templates || []).find(x => x.name === name);
+      return t ? t.body.replace(/\r\n/g, "\n").replace(/\s+$/, "") : "";
+    }
+
+    // テンプレートを選び直したら、説明文の最後のテンプレートを付け替える（コード側の withTemplate_ と同じ区切り）
+    function applyPrepTemplate() {
+      if (!prep) return;
+      const textarea = document.getElementById("prepDesc");
+      let body = textarea.value.replace(/\r\n/g, "\n").replace(/\s+$/, "");
+      const old = templateBody(prep.template);
+      if (old && body.endsWith(old)) body = body.slice(0, body.length - old.length).replace(/\s+$/, "");
+      prep.template = document.getElementById("prepTemplate").value;
+      const next = templateBody(prep.template);
+      textarea.value = next ? (body ? body + "\n\n" + next : next) : body;
+      countPrep();
+    }
+
+    function countPrep() {
+      const max = (prep && prep.titleMax) || 65;
+      const t = Array.from(document.getElementById("prepTitle").value).length;
+      const d = Array.from(document.getElementById("prepDesc").value).length;
+      const tc = document.getElementById("prepTitleCount");
+      tc.textContent = t + " / " + max + "文字";
+      tc.style.color = t > max ? "#b91c1c" : "";
+      document.getElementById("prepDescCount").textContent = d + "文字";
+    }
+
+    function analyzePrep() {
+      if (!prep) return;
+      if (!prep.images.length) return setPrepStatus("先に写真を追加してください。", "error");
+      const hasText = document.getElementById("prepTitle").value || document.getElementById("prepDesc").value;
+      if (hasText && !confirm("今の商品名・説明文をAIの結果で置き換えます。よろしいですか？")) return;
+      setPrepStatus("AIで解析中…（20秒ほどかかります）", "");
+      api("analyzeListing", [prep.key, prep.template]).then(res => {
+        document.getElementById("prepTitle").value = res.title || "";
+        document.getElementById("prepDesc").value = res.description || "";
+        countPrep();
+        markPrepared();
+        setPrepStatus("商品名と説明文を作りました。確認して、必要なら直してから保存してください。", "success");
+      }).catch(err => setPrepStatus(err.message, "error"));
+    }
+
+    function savePrep() {
+      if (!prep) return;
+      const fields = {
+        title: document.getElementById("prepTitle").value,
+        description: document.getElementById("prepDesc").value,
+        template: prep.template
+      };
+      const max = prep.titleMax || 65;
+      if (Array.from(fields.title).length > max) return setPrepStatus("商品名は" + max + "文字以内にしてください。", "error");
+      setPrepStatus("保存中…", "");
+      api("saveListingPrep", [prep.key, fields]).then(() => {
+        markPrepared();
+        setPrepStatus("保存しました。", "success");
+      }).catch(err => setPrepStatus(err.message, "error"));
+    }
+
+    function copyPrep(id) {
+      const el = document.getElementById(id);
+      const done = () => setPrepStatus((id === "prepTitle" ? "商品名" : "商品説明") + "をコピーしました。", "success");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.value).then(done).catch(() => { el.select(); document.execCommand("copy"); done(); });
+      } else {
+        el.select(); document.execCommand("copy"); done();
+      }
+    }
+
+    // 一覧に「出品準備あり」を付ける（次の読み込みを待たずに）
+    function markPrepared() {
+      const item = prep && data.items.find(i => i["キー"] === prep.key);
+      if (item && !item.prepared) { item.prepared = true; render(); }
     }
 
     function renderStaff() {
