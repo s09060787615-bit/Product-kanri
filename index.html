@@ -510,6 +510,15 @@
       </div>
       <div class="scan-status" id="prepStatus" hidden></div>
       <button class="btn-primary" onclick="savePrep()">保存</button>
+
+      <!-- 削除は押し間違えないよう、閉じた中・目立たないボタン・商品IDの入力つき -->
+      <details class="minus" id="prepDeleteBox">
+        <summary>出品準備を削除</summary>
+        <div class="muted" style="margin:6px 0">
+          この商品の出品準備（商品名・商品説明・画像の一覧）を削除します。ドライブの画像ファイルは残ります。
+        </div>
+        <button class="btn-minus" onclick="deletePrep()">この商品の出品準備を削除する</button>
+      </details>
     </div>
   </div>
 
@@ -942,7 +951,24 @@
 
     function closePrep() {
       document.getElementById("prepArea").hidden = true;
+      document.getElementById("prepDeleteBox").open = false;
       prep = null;
+    }
+
+    // 出品準備を削除（商品IDを入力してもらい、合っているときだけ消す）
+    function deletePrep() {
+      if (!prep) return;
+      const typed = prompt("削除するには、商品ID「" + prep.id + "」を入力してください。");
+      if (typed === null) return;
+      if (normId(typed) !== normId(prep.id)) return setPrepStatus("商品IDが違うため、削除しませんでした。", "error");
+      setPrepStatus("削除中…", "");
+      api("deleteListingPrep", [prep.key, typed]).then(() => {
+        const item = data.items.find(i => i["キー"] === prep.key);
+        if (item) item.prepared = false;
+        closePrep();
+        render();
+        showMessage("出品準備を削除しました。", "success");
+      }).catch(err => setPrepStatus(err.message, "error"));
     }
 
     function renderPrepImages() {
