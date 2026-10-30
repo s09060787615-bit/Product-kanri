@@ -71,7 +71,12 @@
       width: 100%; padding: 8px; font-size: 15px; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit;
     }
     .btn-copy { margin-left: auto; padding: 3px 10px; font-size: 12px; font-weight: 500; }
-    .template-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .template-form {
+      display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+      border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; background: #f9fafb;
+    }
+    .template-form-title { font-size: 13px; font-weight: 600; color: #374151; }
+    .template-save { align-self: flex-end; padding: 8px 16px; font-size: 14px; }
     .badge.prepared { background: #fff; border: 1px solid #0d9488; color: #0f766e; }
 
     /* 印刷：入力欄 */
@@ -423,6 +428,7 @@
 
       <section class="settings-section">
         <h2>出品者の登録</h2>
+        <div class="muted">追加・削除した時点で保存されます。</div>
         <ul class="staff-list" id="staffList"></ul>
         <div class="toolbar">
           <input type="text" id="newStaff" placeholder="担当者の名前">
@@ -434,10 +440,12 @@
       <section class="settings-section">
         <h2>テンプレートの登録</h2>
         <ul class="staff-list" id="templateList"></ul>
+        <!-- テンプレートの入力欄（ここの保存ボタンはテンプレートだけを保存する。設定全体の保存ではない） -->
         <div class="template-form">
+          <div class="template-form-title">テンプレートを追加・編集</div>
           <input type="text" id="templateName" placeholder="テンプレートの名前（同じ名前なら上書き）">
           <textarea id="templateBody" rows="6" placeholder="説明文の最後に差し込む文章（発送方法・注意事項など）"></textarea>
-          <button class="btn-primary" onclick="saveTemplateForm()">保存</button>
+          <button class="btn-primary template-save" onclick="saveTemplateForm()">テンプレートを保存</button>
         </div>
       </section>
     </div>
