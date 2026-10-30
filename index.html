@@ -46,9 +46,9 @@
     .check input { width: 18px; height: 18px; }
     .print-preview { overflow-x: auto; padding-bottom: 8px; }
 
-    /* 印刷：管理表（A4横 297×210mm。余白は @page で 6mm） */
+    /* 印刷：管理表（A4横 297×210mm。余白は @page で 6mm → 印刷できる範囲 285×198mm より少し小さく） */
     .sheet {
-      width: 285mm; height: 198mm;
+      width: 283mm; height: 196mm;
       background: #fff; color: #000;
       padding: 2mm 3mm;
       margin: 0 0 10px;
@@ -63,8 +63,8 @@
     .sheet-table { flex: 1; border-collapse: collapse; table-layout: fixed; height: 100%; }
     .sheet-table th, .sheet-table td { border: .3mm solid #000; padding: 0 1mm; font-size: 3.2mm; overflow: hidden; }
     .sheet-table th { height: 9mm; font-weight: 600; text-align: center; line-height: 1.15; }
-    /* 見出し 9mm ＋ 15行 × 11.4mm ＝ 180mm（本文の高さ 182mm に収める） */
-    .sheet-table td { height: 11.4mm; }
+    /* 見出し 9mm ＋ 15行 × 11.2mm ＝ 177mm（本文の高さ 180mm に収める） */
+    .sheet-table td { height: 11.2mm; }
     .sheet-table .c-no { width: 7mm; text-align: center; font-size: 3.6mm; }
     .sheet-table .c-qr { width: 11.4mm; padding: .4mm; text-align: center; }
     .sheet-table .c-qr svg { width: 10.4mm; height: 10.4mm; display: block; margin: 0 auto; }
@@ -77,7 +77,9 @@
 
     @page { size: A4 landscape; margin: 6mm; }
     @media print {
-      body { background: #fff; padding: 0; }
+      body { background: #fff; padding: 0; margin: 0; }
+      /* 画面用の横幅の上限（760px・中央寄せ）を外す。外さないと管理表が右にずれて見切れる */
+      .container, #printView, .print-preview { max-width: none; width: auto; margin: 0; padding: 0; }
       body > *:not(.container), .container > *:not(#printView), #printView > *:not(#printArea) { display: none !important; }
       .print-preview { overflow: visible; padding: 0; }
       .sheet { box-shadow: none; margin: 0; page-break-after: always; break-after: page; }
