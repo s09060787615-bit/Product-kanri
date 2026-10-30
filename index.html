@@ -247,6 +247,7 @@
     .badge.出荷済み { background: #ede9fe; color: #5b21b6; }
     .badge.戻り { background: #fef3c7; color: #92400e; }
     .badge.販売済 { background: #f3f4f6; color: #6b7280; }
+    .badge.処理済み { background: #e5e7eb; color: #374151; }
     .badge.pending { background: #fff; border: 1px dashed #9ca3af; color: #6b7280; }
 
     .empty { text-align: center; color: #6b7280; padding: 24px 0; }
@@ -486,6 +487,9 @@
           <button class="btn-minus" data-action="prev" onclick="moveProgress('prev')">◀ 進捗を一つ戻す</button>
           <button class="btn-minus" data-action="clearListing" onclick="clearFields(['出品者', '出品日'])">出品の取り消し</button>
           <button class="btn-minus" data-action="clearReturn" onclick="clearFields(['戻り日'])">戻り日の取り消し</button>
+          <!-- 仕組みが整う前にすでに返却・販売された商品を「処理済み」にまとめる（先方スプレッドシートだけ） -->
+          <button class="btn-minus" data-action="done" onclick="setDoneFlag(true)">処理済みにする（返却・販売済みの整理）</button>
+          <button class="btn-minus" data-action="undone" onclick="setDoneFlag(false)">処理済みを外す</button>
         </div>
       </details>
     </div>
@@ -645,7 +649,7 @@
       if (fromHash) history.replaceState(null, "", location.pathname + location.search);
     })();
 
-    const TABS = ["未出品", "出品済", "入札あり", "入金済み", "梱包済み", "出荷済み", "戻り", "すべて"];
+    const TABS = ["未出品", "出品済", "入札あり", "入金済み", "梱包済み", "出荷済み", "戻り", "処理済み", "すべて"];
 
     let data = { items: [], staff: [], rejected: [] };
     let currentTab = "未出品";
@@ -776,6 +780,24 @@
       });
     }
 
+    // 処理済みの印を付ける・外す（すでに返却・販売された商品を未出品などからまとめて外す）
+    function setDoneFlag(done) {
+      if (busy) return;
+      const items = selectedItems();
+      if (!items.length) return;
+      const ids = items.map(i => i["商品ID"]);
+      const list = ids.slice(0, 10).join("、") + (ids.length > 10 ? " ほか" + (ids.length - 10) + "件" : "");
+      const text = done
+        ? "処理済みにします（すでに返却・販売された商品として、未出品などの一覧から外します）。"
+        : "処理済みを外して、元の状態に戻します。";
+      if (!confirm(text + "\n\n対象：" + items.length + "件\n" + list)) return;
+      call("setDone", [items.map(i => i["キー"]), done], result => {
+        selected.clear();
+        setData(result);
+        showMessage((done ? "処理済みにしました。" : "処理済みを外しました。") + "（" + items.length + "件）", "success");
+      });
+    }
+
     function inTab(item) {
       if (currentTab === "読み取り") return scannedKeys.has(item["キー"]);
       return currentTab === "すべて" || item["状態"] === currentTab;
@@ -843,7 +865,10 @@
       const stage = flowStageOf(item);
       const i = flow.indexOf(stage);
       const returned = item["状態"] === "戻り";
+      // 処理済みの商品は「処理済みを外す」だけ
+      if (item["処理済み"]) return { undone: true };
       return {
+        done: true,
         listing: !returned && stage === "未出品",
         next: !returned && i >= 1 && i < flow.length - 1,
         return: returned || (data.returnAllowedStages || []).indexOf(stage) !== -1,
@@ -874,7 +899,7 @@
         stages.length === 1 && all("next") ? stages[0] + " → " + flow[flow.indexOf(stages[0]) + 1] : "";
 
       const mainActions = ["listing", "prep", "next", "return"].some(all);
-      const minusActions = ["cancel", "prev", "clearListing", "clearReturn"].some(all);
+      const minusActions = ["cancel", "prev", "clearListing", "clearReturn", "done", "undone"].some(all);
       document.getElementById("minusBox").hidden = !minusActions;
       // 選択がなくなったら閉じておく（次に選んだときに開いたままにしない）
       if (!minusActions || !items.length) document.getElementById("minusBox").open = false;
@@ -1200,6 +1225,7 @@
       return (data.items || [])
         .filter(i => i["出品日"] && i["出品日"] >= from && i["出品日"] <= to)
         .filter(i => withReturned || i["状態"] !== "戻り")
+        .filter(i => !i["処理済み"]) // 処理済み（すでに返却・販売された商品）は載せない
         .sort((a, b) => a["出品日"].localeCompare(b["出品日"]) ||
           String(a["商品ID"]).localeCompare(String(b["商品ID"]), "ja", { numeric: true }));
     }
