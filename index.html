@@ -287,6 +287,9 @@
       min-height: 2.4em;
     }
     input[type=date]::-webkit-date-and-time-value { text-align: left; }
+    /* それでも広がる端末のために、日付欄を列の幅の枠で包み、はみ出した分は切り落とす */
+    .date-wrap { min-width: 0; width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; }
+    .date-wrap input[type=date] { width: 100%; border: none; border-radius: 0; }
     .action-row button { padding: 8px 6px; white-space: nowrap; }
     .progress-info { font-size: 13px; color: #4b5563; }
     .no-action { margin-top: 8px; }
@@ -453,7 +456,7 @@
       </div>
       <div class="action-row" data-action="listing">
         <label>出品日</label>
-        <input type="date" id="listedDate">
+        <div class="date-wrap"><input type="date" id="listedDate"></div>
         <button class="btn-primary" onclick="saveListing()">出品登録</button>
       </div>
       <!-- 進捗はこのスプレッドシートだけで管理（本体には書き戻さない）。1段階ずつしか動かせない -->
@@ -470,7 +473,7 @@
       </div>
       <div class="action-row" data-action="return">
         <label>戻り日</label>
-        <input type="date" id="returnDate">
+        <div class="date-wrap"><input type="date" id="returnDate"></div>
         <button class="btn-return" onclick="saveReturn()">戻り登録</button>
       </div>
       <div class="muted no-action" id="noAction">選んだ商品にできる操作はありません（状態の違う商品が混ざっているときは、状態ごとに選んでください）</div>
