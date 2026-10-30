@@ -248,11 +248,6 @@
     .badge.戻り { background: #fef3c7; color: #92400e; }
     .badge.販売済 { background: #f3f4f6; color: #6b7280; }
     .badge.処理済み { background: #e5e7eb; color: #374151; }
-    .badge.working { background: #ffedd5; color: #9a3412; }
-    .badge.working.mine { background: #fff; border: 1px solid #f97316; color: #c2410c; }
-    .work-line { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9a3412; }
-    .link-btn { background: none; padding: 4px 0; font-size: 12px; font-weight: 500; color: #6b7280; text-decoration: underline; align-self: flex-start; }
-    #workerSelect { width: 100%; padding: 8px; font-size: 15px; border: 1px solid #d1d5db; border-radius: 8px; }
     .badge.pending { background: #fff; border: 1px dashed #9ca3af; color: #6b7280; }
 
     .empty { text-align: center; color: #6b7280; padding: 24px 0; }
@@ -426,13 +421,6 @@
         <button onclick="closeSettings()">閉じる</button>
       </div>
 
-      <!-- 作業中の印に使う名前（この端末のブラウザに覚える）。覚えている間は出さない（下の「作業者を変更」で出す） -->
-      <section class="settings-section" id="workerSection">
-        <h2>この端末の作業者</h2>
-        <select id="workerSelect" onchange="setWorker(this.value)"></select>
-        <div class="muted" style="margin-top:4px">出品準備を開くと、この名前で「作業中」の印が付きます（ほかの人に見えます）。</div>
-      </section>
-
       <section class="settings-section">
         <h2>出品者の登録</h2>
         <ul class="staff-list" id="staffList"></ul>
@@ -452,8 +440,6 @@
           <button class="btn-primary" onclick="saveTemplateForm()">保存</button>
         </div>
       </section>
-
-      <button class="link-btn" id="workerChange" onclick="showWorkerSection()"></button>
     </div>
   </div>
 
@@ -533,11 +519,6 @@
       <div class="prep-head">
         <div><span class="item-id" id="prepId"></span> <span id="prepName"></span></div>
         <button onclick="closePrep()">閉じる</button>
-      </div>
-      <!-- 作業中の印：閉じても外れない（出品登録・「作業を終える」・時間切れで外れる） -->
-      <div class="work-line">
-        <span id="prepWork"></span>
-        <button class="btn-copy" onclick="finishWork()">作業を終える</button>
       </div>
 
       <div class="prep-images" id="prepImages"></div>
@@ -866,11 +847,6 @@
                 '<span class="badge ' + esc(item["状態"]) + '">' + esc(item["状態"]) + '</span>' +
                 (item.pending ? '<span class="badge pending">本体反映待ち</span>' : '') +
                 (item.prepared ? '<span class="badge prepared">出品準備あり</span>' : '') +
-                (item.working
-                  ? (item.working.by === getWorker()
-                    ? '<span class="badge working mine">自分が作業中</span>'
-                    : '<span class="badge working">作業中：' + esc(item.working.by) + ' ' + esc(item.working.since) + '〜</span>')
-                  : '') +
               '</div>' +
               '<div class="item-name">' + esc(item["商品名"]) + '</div>' +
               '<div class="item-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join("") + '</div>' +
@@ -940,44 +916,7 @@
       if (!app || !apiToken) return showMessage("先に商品管理ページのURLを開いてください。", "error");
       renderStaff();
       renderTemplates();
-      renderWorker();
       document.getElementById("settingsArea").hidden = false;
-    }
-
-    // ==========================================
-    // この端末の作業者（作業中の印に使う名前。ブラウザに覚える）
-    // ==========================================
-    const workerStorageKey = "partner-worker-" + appKey;
-
-    function getWorker() {
-      try { return localStorage.getItem(workerStorageKey) || ""; } catch (e) { return ""; }
-    }
-
-    function setWorker(name) {
-      try { localStorage.setItem(workerStorageKey, name || ""); } catch (e) {}
-      render();
-      if (name) showMessage("この端末の作業者を「" + name + "」にしました。", "success");
-    }
-
-    // 作業者を覚えている間は欄を出さず、一番下の「作業者を変更（今：○○）」だけを出す。
-    // 覚えていない・覚えた名前が出品者から消されたときは欄を出す
-    function renderWorker(forceShow) {
-      const sel = document.getElementById("workerSelect");
-      const cur = getWorker();
-      const known = !!cur && (data.staff || []).indexOf(cur) !== -1;
-      sel.innerHTML = '<option value="">選んでください</option>' +
-        (data.staff || []).map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join("");
-      sel.value = known ? cur : "";
-      const show = forceShow || !known;
-      document.getElementById("workerSection").hidden = !show;
-      const link = document.getElementById("workerChange");
-      link.hidden = show;
-      link.textContent = "作業者を変更（今：" + cur + "）";
-    }
-
-    function showWorkerSection() {
-      renderWorker(true);
-      document.getElementById("workerSection").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function closeSettings() {
@@ -1053,44 +992,9 @@
       el.className = "scan-status" + (type ? " " + type : "");
     }
 
-    // 出品準備を開く前に「作業中」の印を付ける。ほかの人が作業中なら確認してから代わる
-    async function openPrep() {
+    function openPrep() {
       const item = selectedItems()[0];
       if (!item) return;
-      const worker = getWorker();
-      if (!worker) {
-        showMessage("先に右上の「設定」で「この端末の作業者」を選んでください。", "error");
-        return openSettings();
-      }
-      try {
-        let res = await api("claimWork", [item["キー"], worker, false]);
-        if (res.conflict) {
-          if (!confirm(res.by + " さんが " + res.since + " から作業中です。\n代わりにあなたが作業しますか？")) return;
-          res = await api("claimWork", [item["キー"], worker, true]);
-        }
-        item.working = { by: res.by, since: res.since };
-        render();
-        document.getElementById("prepWork").textContent = "作業中：" + res.by + "（" + res.since + "〜）";
-      } catch (err) {
-        return showMessage(err.message, "error");
-      }
-      openPrepPanel(item);
-    }
-
-    // 作業中の印を外す（出品をやめた・終わったとき。出品登録したときは自動で外れる）
-    function finishWork() {
-      if (!prep) return;
-      const key = prep.key;
-      api("releaseWork", [key, getWorker()]).then(res => {
-        const item = data.items.find(i => i["キー"] === key);
-        if (item && res.released) item.working = null;
-        closePrep();
-        render();
-        showMessage(res.released ? "作業を終えました。" : "ほかの人が作業中のため、印は外していません。", res.released ? "success" : "error");
-      }).catch(err => setPrepStatus(err.message, "error"));
-    }
-
-    function openPrepPanel(item) {
       document.getElementById("prepArea").hidden = false;
       document.getElementById("prepId").textContent = item["商品ID"];
       document.getElementById("prepName").textContent = item["商品名"];
@@ -1661,16 +1565,8 @@
       const date = document.getElementById("listedDate").value;
       if (!seller) return showMessage("出品者を選んでください。", "error");
       if (!date) return showMessage("出品日を入力してください。", "error");
-      // ほかの人が作業中の商品があれば、重複して出品していないか注意を出す
-      const me = getWorker();
-      const others = selectedItems().filter(i => i.working && i.working.by !== me);
-      const warn = others.length
-        ? "【注意】ほかの人が作業中の商品があります：\n" +
-          others.slice(0, 5).map(i => i["商品ID"] + "（" + i.working.by + " " + i.working.since + "〜）").join("\n") +
-          (others.length > 5 ? "\nほか" + (others.length - 5) + "件" : "") + "\n重複して出品していないか確認してください。\n\n"
-        : "";
       save({ "出品者": seller, "出品日": date },
-        warn + "出品者「" + seller + "」・出品日 " + date + " で出品登録します。", "出品登録しました。");
+        "出品者「" + seller + "」・出品日 " + date + " で出品登録します。", "出品登録しました。");
     }
 
     function saveReturn() {
@@ -1733,14 +1629,6 @@
         document.getElementById("syncInfo").textContent = "";
       } else {
         load();
-        // 1分ごとに一覧を読み直す（ほかの人の「作業中」や出品登録をすぐ見られるように）。
-        // 操作中・画面を開いているとき・裏に回っているときは読み直さない
-        setInterval(() => {
-          const quiet = !busy && document.visibilityState === "visible" && currentView === "list" &&
-            document.getElementById("prepArea").hidden && document.getElementById("settingsArea").hidden &&
-            document.getElementById("cameraArea").hidden;
-          if (quiet) api("getPartnerData", []).then(res => { if (!busy) setData(res); }).catch(() => {});
-        }, 60 * 1000);
       }
     }
   </script>
