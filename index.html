@@ -251,6 +251,7 @@
     .badge.working { background: #ffedd5; color: #9a3412; }
     .badge.working.mine { background: #fff; border: 1px solid #f97316; color: #c2410c; }
     .work-line { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9a3412; }
+    .link-btn { background: none; padding: 4px 0; font-size: 12px; font-weight: 500; color: #6b7280; text-decoration: underline; align-self: flex-start; }
     #workerSelect { width: 100%; padding: 8px; font-size: 15px; border: 1px solid #d1d5db; border-radius: 8px; }
     .badge.pending { background: #fff; border: 1px dashed #9ca3af; color: #6b7280; }
 
@@ -425,8 +426,8 @@
         <button onclick="closeSettings()">閉じる</button>
       </div>
 
-      <!-- 作業中の印に使う名前（この端末のブラウザに覚える） -->
-      <section class="settings-section">
+      <!-- 作業中の印に使う名前（この端末のブラウザに覚える）。覚えている間は出さない（下の「作業者を変更」で出す） -->
+      <section class="settings-section" id="workerSection">
         <h2>この端末の作業者</h2>
         <select id="workerSelect" onchange="setWorker(this.value)"></select>
         <div class="muted" style="margin-top:4px">出品準備を開くと、この名前で「作業中」の印が付きます（ほかの人に見えます）。</div>
@@ -451,6 +452,8 @@
           <button class="btn-primary" onclick="saveTemplateForm()">保存</button>
         </div>
       </section>
+
+      <button class="link-btn" id="workerChange" onclick="showWorkerSection()"></button>
     </div>
   </div>
 
@@ -953,14 +956,28 @@
     function setWorker(name) {
       try { localStorage.setItem(workerStorageKey, name || ""); } catch (e) {}
       render();
+      if (name) showMessage("この端末の作業者を「" + name + "」にしました。", "success");
     }
 
-    function renderWorker() {
+    // 作業者を覚えている間は欄を出さず、一番下の「作業者を変更（今：○○）」だけを出す。
+    // 覚えていない・覚えた名前が出品者から消されたときは欄を出す
+    function renderWorker(forceShow) {
       const sel = document.getElementById("workerSelect");
       const cur = getWorker();
+      const known = !!cur && (data.staff || []).indexOf(cur) !== -1;
       sel.innerHTML = '<option value="">選んでください</option>' +
         (data.staff || []).map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join("");
-      sel.value = (data.staff || []).indexOf(cur) !== -1 ? cur : "";
+      sel.value = known ? cur : "";
+      const show = forceShow || !known;
+      document.getElementById("workerSection").hidden = !show;
+      const link = document.getElementById("workerChange");
+      link.hidden = show;
+      link.textContent = "作業者を変更（今：" + cur + "）";
+    }
+
+    function showWorkerSection() {
+      renderWorker(true);
+      document.getElementById("workerSection").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function closeSettings() {
