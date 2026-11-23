@@ -78,6 +78,9 @@
     .template-form-title { font-size: 13px; font-weight: 600; color: #374151; }
     .template-save { align-self: flex-end; padding: 8px 16px; font-size: 14px; }
     .badge.prepared { background: #fff; border: 1px solid #0d9488; color: #0f766e; }
+    /* 管理番号（いろは：月番号-連番） */
+    .manage-no { font-weight: 700; font-size: 13px; color: #7c2d12; background: #ffedd5; border-radius: 4px; padding: 0 6px; }
+    .sheet-table .s-no { font-weight: 700; font-size: 3.4mm; margin-right: 1.5mm; }
 
     /* 印刷：入力欄 */
     .print-form { display: flex; flex-direction: column; gap: 8px; }
@@ -814,7 +817,7 @@
     function matches(item) {
       const q = document.getElementById("search").value.trim().toLowerCase();
       if (!q) return true;
-      return (item["商品ID"] + " " + item["商品名"]).toLowerCase().indexOf(q) !== -1;
+      return (item["商品ID"] + " " + item["商品名"] + " " + (item["管理番号"] || "")).toLowerCase().indexOf(q) !== -1;
     }
 
     function visibleItems() {
@@ -852,6 +855,7 @@
             '<input type="checkbox"' + (checked ? " checked" : "") + ' tabindex="-1">' +
             '<div class="item-body">' +
               '<div class="item-head"><span class="item-id">' + esc(item["商品ID"]) + '</span>' +
+                (item["管理番号"] ? '<span class="manage-no">No.' + esc(item["管理番号"]) + '</span>' : '') +
                 '<span class="badge ' + esc(item["状態"]) + '">' + esc(item["状態"]) + '</span>' +
                 (item.pending ? '<span class="badge pending">本体反映待ち</span>' : '') +
                 (item.prepared ? '<span class="badge prepared">出品準備あり</span>' : '') +
@@ -1255,6 +1259,7 @@
       return '<tr><td class="c-no">' + no + '</td>' +
         '<td class="c-qr">' + qrSvg(item["商品ID"]) + '</td>' +
         '<td class="c-name"><div class="s-line"><span class="s-id">' + esc(item["商品ID"]) + '</span>' +
+          (item["管理番号"] ? '<span class="s-no">No.' + esc(item["管理番号"]) + '</span>' : '') +
           '<span class="s-name">' + esc(item["商品名"]) + '</span></div>' +
           (withSeller && item["出品者"] ? '<div class="s-seller">出品者：' + esc(item["出品者"]) + '</div>' : '') + '</td>' +
         '<td class="c-chk"></td><td class="c-chk"></td><td class="c-chk"></td><td class="c-chk"></td></tr>';
@@ -1556,15 +1561,25 @@
 
     function save(fields, confirmText, doneText) {
       if (busy) return;
-      const items = selectedItems();
+      // 商品IDの順に送る（管理番号を付ける行先では、この順に連番を付ける）
+      const items = selectedItems().slice().sort((a, b) =>
+        String(a["商品ID"]).localeCompare(String(b["商品ID"]), "ja", { numeric: true }));
       if (!items.length) return;
       const ids = items.map(i => i["商品ID"]);
       const list = ids.slice(0, 10).join("、") + (ids.length > 10 ? " ほか" + (ids.length - 10) + "件" : "");
       if (!confirm(confirmText + "\n\n対象：" + items.length + "件\n" + list)) return;
-      call("saveEntries", [items.map(i => i["キー"]), fields], result => {
+      const keys = items.map(i => i["キー"]);
+      call("saveEntries", [keys, fields], result => {
         selected.clear();
         setData(result);
-        showMessage(doneText + "（" + items.length + "件）", "success");
+        // 出品登録で管理番号が付いた商品は、その番号も知らせる
+        const numbers = fields["出品日"] && data.manageNumberEnabled
+          ? keys.map(k => data.items.find(i => i["キー"] === k)).filter(i => i && i["管理番号"])
+            .map(i => i["商品ID"] + " → " + i["管理番号"])
+          : [];
+        showMessage(doneText + "（" + items.length + "件）" +
+          (numbers.length ? "\n管理番号：\n" + numbers.slice(0, 10).join("\n") + (numbers.length > 10 ? "\nほか" + (numbers.length - 10) + "件" : "") : ""),
+          "success");
       });
     }
 
